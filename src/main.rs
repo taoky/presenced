@@ -3,7 +3,7 @@ use std::{
     error::Error,
     fs,
     path::Path,
-    sync::{Mutex, OnceLock},
+    sync::{Arc, Mutex},
 };
 
 use chrono::{DateTime, Utc};
@@ -18,7 +18,7 @@ use tracing::{debug, info, warn};
 mod wellknown;
 use wellknown::CLIENT_MAPPINGS;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct State {
     large_text: String,
     small_text: String,
@@ -28,8 +28,7 @@ struct State {
     end_time: Option<std::time::SystemTime>,
 }
 
-// client_id -> state
-static STATE: OnceLock<Mutex<HashMap<String, State>>> = OnceLock::new();
+type SharedState = Arc<Mutex<HashMap<String, State>>>;
 
 #[derive(Debug)]
 struct Message {
@@ -145,7 +144,7 @@ async fn socket_encode(socket: &mut UnixStream, message: Message) -> Result<(), 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    STATE.get_or_init(|| Mutex::new(HashMap::new()));
+    let state: SharedState = Arc::new(Mutex::new(HashMap::new()));
     let xdg_runtime_dir = dirs::runtime_dir().unwrap_or("/tmp".into());
     let paths = [
         xdg_runtime_dir.join("app/com.discordapp.Discord/discord-ipc-0"),
@@ -153,8 +152,10 @@ async fn main() -> Result<(), Box<dyn Error>> {
     ];
     tracing_subscriber::fmt::init();
     let mut join_set = JoinSet::new();
+
+    let state_1 = state.clone();
     join_set.spawn(async move {
-        periodic_print().await;
+        periodic_send(state_1).await;
     });
     for path in paths.iter() {
         if Path::new(path).exists() {
@@ -164,11 +165,13 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let listener = UnixListener::bind(path)?;
         info!("Listening on: {}", path.display());
 
+        let state_1 = state.clone();
         join_set.spawn(async move {
             loop {
                 let (socket, _) = listener.accept().await.expect("accept failed");
+                let state_2 = state_1.clone();
                 tokio::spawn(async move {
-                    if let Err(e) = handle_connection(socket).await {
+                    if let Err(e) = handle_connection(socket, state_2).await {
                         warn!("Error: {:?}", e);
                     }
                 });
@@ -182,35 +185,48 @@ async fn main() -> Result<(), Box<dyn Error>> {
 }
 
 fn client_id_to_name(client_id: &str) -> String {
-    CLIENT_MAPPINGS.get(client_id).unwrap_or(&client_id).to_string()
+    CLIENT_MAPPINGS
+        .get(client_id)
+        .unwrap_or(&client_id)
+        .to_string()
 }
 
-async fn periodic_print() {
+async fn periodic_send(state: SharedState) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
-        let state = STATE.get().unwrap().lock().unwrap();
+        let state = state.lock().unwrap().clone();
+        let mut payload_vec: Vec<presenced::PresenceState> = vec![];
         for (client_id, state) in state.iter() {
-            info!(
-                "client: {}, state:\n  large_text: {}\n  small_text: {}\n  state: {}\n  details: {}\n  start_time: {}\n  end_time: {}",
-                client_id_to_name(client_id),
-                state.large_text,
-                state.small_text,
-                state.state,
-                state.details,
-                match state.start_time {
-                    Some(d) => DateTime::<Utc>::from(d).to_rfc3339(),
-                    None => "".to_string(),
-                },
-                match state.end_time {
-                    Some(d) => DateTime::<Utc>::from(d).to_rfc3339(),
-                    None => "".to_string(),
-                },
-            );
+            payload_vec.push(presenced::PresenceState {
+                client: client_id_to_name(client_id),
+                large_text: state.large_text.clone(),
+                small_text: state.small_text.clone(),
+                state: state.state.clone(),
+                details: state.details.clone(),
+                start_time: state.start_time.map(DateTime::<Utc>::from),
+                end_time: state.end_time.map(DateTime::<Utc>::from),
+            });
+        }
+        // Send to endpoint /state
+        let response = reqwest::Client::new()
+            .post("http://localhost:3001/state")
+            .json(&presenced::StateUpdate {
+                token: "test".to_string(),
+                state: payload_vec,
+            })
+            .timeout(std::time::Duration::from_secs(5))
+            .send()
+            .await;
+        if let Err(e) = response {
+            warn!("Error sending state: {:?}", e);
         }
     }
 }
 
-async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>> {
+async fn handle_connection(
+    mut socket: UnixStream,
+    global_state: SharedState,
+) -> Result<(), Box<dyn Error>> {
     // Handshake
     let message = socket_decode(&mut socket).await?;
     if message.opcode != 0 {
@@ -231,7 +247,11 @@ async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>>
     };
     socket_encode(&mut socket, handshake_resp).await?;
 
-    async fn handle_inner(client_id: &str, mut socket: UnixStream) -> Result<(), Box<dyn Error>> {
+    async fn handle_inner(
+        client_id: &str,
+        mut socket: UnixStream,
+        global_state: &SharedState,
+    ) -> Result<(), Box<dyn Error>> {
         loop {
             let message = socket_decode(&mut socket).await?;
             debug!("Message: {:?}", message);
@@ -266,9 +286,7 @@ async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>>
                                 }
                             }),
                         };
-                        STATE
-                            .get()
-                            .unwrap()
+                        global_state
                             .lock()
                             .unwrap()
                             .insert(client_id.to_string(), state);
@@ -283,8 +301,8 @@ async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>>
         }
     }
 
-    let res = handle_inner(&client_id, socket).await;
-    STATE.get().unwrap().lock().unwrap().remove(&client_id);
+    let res = handle_inner(&client_id, socket, &global_state).await;
+    global_state.lock().unwrap().remove(&client_id);
 
     res
 }
