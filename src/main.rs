@@ -10,15 +10,10 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{UnixListener, UnixStream}, task::JoinSet,
+    net::{UnixListener, UnixStream},
+    task::JoinSet,
 };
 use tracing::{debug, info, warn};
-
-// const SOCKET_PATH: &str = "/tmp/discord-ipc-0";
-const SOCKET_PATHS: [&str; 2] = [
-    "/run/user/1000/app/com.discordapp.Discord/discord-ipc-0",
-    "/run/user/1000/discord-ipc-0",
-];
 
 #[derive(Debug)]
 struct State {
@@ -148,18 +143,23 @@ async fn socket_encode(socket: &mut UnixStream, message: Message) -> Result<(), 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     STATE.get_or_init(|| Mutex::new(HashMap::new()));
+    let xdg_runtime_dir = dirs::runtime_dir().unwrap_or("/tmp".into());
+    let paths = [
+        xdg_runtime_dir.join("app/com.discordapp.Discord/discord-ipc-0"),
+        xdg_runtime_dir.join("discord-ipc-0"),
+    ];
     tracing_subscriber::fmt::init();
     let mut join_set = JoinSet::new();
     join_set.spawn(async move {
         periodic_print().await;
     });
-    for path in SOCKET_PATHS {
+    for path in paths.iter() {
         if Path::new(path).exists() {
             fs::remove_file(path)?;
         }
 
         let listener = UnixListener::bind(path)?;
-        info!("Listening on: {}", path);
+        info!("Listening on: {}", path.display());
 
         join_set.spawn(async move {
             loop {
@@ -242,16 +242,20 @@ async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>>
                             details: message.args.activity.details,
                             start_time: message.args.activity.timestamps.start.map(|timestamps| {
                                 if timestamps < 9999999999 {
-                                    std::time::UNIX_EPOCH + std::time::Duration::from_secs(timestamps)
+                                    std::time::UNIX_EPOCH
+                                        + std::time::Duration::from_secs(timestamps)
                                 } else {
-                                    std::time::UNIX_EPOCH + std::time::Duration::from_millis(timestamps)
+                                    std::time::UNIX_EPOCH
+                                        + std::time::Duration::from_millis(timestamps)
                                 }
                             }),
                             end_time: message.args.activity.timestamps.end.map(|timestamps| {
                                 if timestamps < 9999999999 {
-                                    std::time::UNIX_EPOCH + std::time::Duration::from_secs(timestamps)
+                                    std::time::UNIX_EPOCH
+                                        + std::time::Duration::from_secs(timestamps)
                                 } else {
-                                    std::time::UNIX_EPOCH + std::time::Duration::from_millis(timestamps)
+                                    std::time::UNIX_EPOCH
+                                        + std::time::Duration::from_millis(timestamps)
                                 }
                             }),
                         };
@@ -272,10 +276,8 @@ async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>>
         }
     }
 
-    if let Err(e) = handle_inner(&client_id, socket).await {
-        STATE.get().unwrap().lock().unwrap().remove(&client_id);
-        return Err(e);
-    }
+    let res = handle_inner(&client_id, socket).await;
+    STATE.get().unwrap().lock().unwrap().remove(&client_id);
 
-    Ok(())
+    res
 }
