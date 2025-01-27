@@ -1,6 +1,6 @@
 services:
   http:
-    image: ghcr.io/taoky/presenced:latest
+    image: ghcr.io/taoky/presenced:master
     restart: unless-stopped
     ports:
       - "127.0.0.1:3001:3001"

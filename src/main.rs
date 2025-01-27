@@ -221,7 +221,7 @@ async fn periodic_send(state: SharedState) {
         }
         // Send to endpoint /state
         let response = reqwest::Client::new()
-            .post("http://localhost:3001/state")
+            .post(UPSTREAM_URL.get().unwrap())
             .json(&presenced::StateUpdate {
                 token: EXPECTED_TOKEN.get().unwrap().to_string(),
                 state: payload_vec,
