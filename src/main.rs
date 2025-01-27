@@ -144,7 +144,10 @@ async fn socket_encode(socket: &mut UnixStream, message: Message) -> Result<(), 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    std::env::set_var("RUST_LOG", format!("info,{}", std::env::var("RUST_LOG").unwrap_or_default()));
+    std::env::set_var(
+        "RUST_LOG",
+        format!("info,{}", std::env::var("RUST_LOG").unwrap_or_default()),
+    );
     tracing_subscriber::fmt::init();
     EXPECTED_TOKEN.get_or_init(|| std::env::var("TOKEN").expect("TOKEN env var not set"));
     UPSTREAM_URL.get_or_init(|| {
