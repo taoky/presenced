@@ -1,0 +1,19 @@
+[Unit]
+Description=A mock Discord presence server
+After=network.target
+
+[Service]
+ExecStart=%h/.local/bin/presenced
+Restart=on-failure
+MemoryMax=100M
+ProtectSystem=full
+ReadOnlyPaths=%h/.local/bin/presenced
+ReadOnlyPaths=%h/.config/presenced.env
+NoNewPrivileges=true
+EnvironmentFile=%h/.config/presenced.env
+PrivateTmp=true
+PrivateDevices=true
+Type=notify
+
+[Install]
+WantedBy=default.target

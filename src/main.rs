@@ -165,6 +165,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
     join_set.spawn(async move {
         periodic_send(state_1).await;
     });
+    let _ = sd_notify::notify(true, &[sd_notify::NotifyState::Ready]);
     for path in paths.iter() {
         if Path::new(path).exists() {
             fs::remove_file(path)?;
