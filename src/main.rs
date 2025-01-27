@@ -144,6 +144,7 @@ async fn socket_encode(socket: &mut UnixStream, message: Message) -> Result<(), 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    std::env::set_var("RUST_LOG", format!("info,{}", std::env::var("RUST_LOG").unwrap_or_default()));
     tracing_subscriber::fmt::init();
     EXPECTED_TOKEN.get_or_init(|| std::env::var("TOKEN").expect("TOKEN env var not set"));
     UPSTREAM_URL.get_or_init(|| {
@@ -221,14 +222,15 @@ async fn periodic_send(state: SharedState) {
         }
         // Send to endpoint /state
         let response = reqwest::Client::new()
-            .post(UPSTREAM_URL.get().unwrap())
+            .post(format!("{}/state", UPSTREAM_URL.get().unwrap()))
             .json(&presenced::StateUpdate {
                 token: EXPECTED_TOKEN.get().unwrap().to_string(),
                 state: payload_vec,
             })
             .timeout(std::time::Duration::from_secs(5))
             .send()
-            .await;
+            .await
+            .and_then(|r| r.error_for_status());
         if let Err(e) = response {
             warn!("Error sending state: {:?}", e);
         }
