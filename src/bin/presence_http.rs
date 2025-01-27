@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::sync::{Arc, OnceLock};
 
 use askama::Template;
 use axum::{
@@ -48,14 +48,14 @@ async fn show_state(State(app_state): State<Arc<AppState>>) -> impl IntoResponse
     axum::response::Html(reply_html).into_response()
 }
 
-const EXPECTED_TOKEN: &str = "test";
+static EXPECTED_TOKEN: OnceLock<String> = OnceLock::new();
 
 #[debug_handler]
 async fn update_state(
     State(app_state): State<Arc<AppState>>,
     Json(payload): Json<StateUpdate>,
 ) -> StatusCode {
-    if payload.token != EXPECTED_TOKEN {
+    if payload.token != *EXPECTED_TOKEN.get().unwrap() {
         return StatusCode::UNAUTHORIZED;
     }
 
@@ -71,6 +71,7 @@ async fn update_state(
 #[tokio::main]
 async fn main() {
     tracing_subscriber::fmt::init();
+    EXPECTED_TOKEN.get_or_init(|| std::env::var("TOKEN").expect("TOKEN env var not set"));
     let app_state = Arc::new(AppState::default());
 
     let app = Router::new()

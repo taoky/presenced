@@ -3,7 +3,7 @@ use std::{
     error::Error,
     fs,
     path::Path,
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, OnceLock},
 };
 
 use chrono::{DateTime, Local};
@@ -144,6 +144,14 @@ async fn socket_encode(socket: &mut UnixStream, message: Message) -> Result<(), 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    EXPECTED_TOKEN.get_or_init(|| std::env::var("TOKEN").expect("TOKEN env var not set"));
+    UPSTREAM_URL.get_or_init(|| {
+        std::env::var("UPSTREAM").unwrap_or_else(|_| "http://localhost:3001".to_string())
+    });
+    info!(
+        "Starting up, using upstream {}",
+        *UPSTREAM_URL.get().unwrap()
+    );
     let state: SharedState = Arc::new(Mutex::new(HashMap::new()));
     let xdg_runtime_dir = dirs::runtime_dir().unwrap_or("/tmp".into());
     let paths = [
@@ -191,6 +199,9 @@ fn client_id_to_name(client_id: &str) -> String {
         .to_string()
 }
 
+static EXPECTED_TOKEN: OnceLock<String> = OnceLock::new();
+static UPSTREAM_URL: OnceLock<String> = OnceLock::new();
+
 async fn periodic_send(state: SharedState) {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
@@ -211,7 +222,7 @@ async fn periodic_send(state: SharedState) {
         let response = reqwest::Client::new()
             .post("http://localhost:3001/state")
             .json(&presenced::StateUpdate {
-                token: "test".to_string(),
+                token: EXPECTED_TOKEN.get().unwrap().to_string(),
                 state: payload_vec,
             })
             .timeout(std::time::Duration::from_secs(5))
