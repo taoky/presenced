@@ -11,9 +11,29 @@
 2. Copy `presenced.env.example` to `~/.config/presenced.env`, and fill in the values.
 3. Copy `presenced.service` to `~/.config/systemd/user/presenced.service`, `systemctl --user daemon-reload`, and `systemctl --user enable --now presenced.service`.
 
+```shell
+cargo build --release
+install -Dm755 target/release/presenced ~/.local/bin/presenced
+install -Dm644 contrib/presenced/presenced.env.example ~/.config/presenced.env
+# Edit ~/.config/presenced.env
+install -Dm644 contrib/presenced/presenced.service ~/.config/systemd/user/presenced.service
+systemctl --user daemon-reload
+systemctl --user enable --now presenced.service
+```
+
 ### presence-http
 
 Use `docker compose`. Please refer to `contrib/presence_http/`.
+
+### os_presence
+
+```shell
+cargo build --release
+install -Dm755 target/release/os_presence ~/.local/bin/os_presence
+install -Dm644 contrib/os_presence/os_presence.service ~/.config/systemd/user/os_presence.service
+systemctl --user daemon-reload
+systemctl --user enable --now os_presence.service
+```
 
 ## License
 
