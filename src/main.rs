@@ -10,12 +10,15 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
-    net::{UnixListener, UnixStream},
+    net::{UnixListener, UnixStream}, task::JoinSet,
 };
 use tracing::{debug, info, warn};
 
 // const SOCKET_PATH: &str = "/tmp/discord-ipc-0";
-const SOCKET_PATH: &str = "/run/user/1000/app/com.discordapp.Discord/discord-ipc-0";
+const SOCKET_PATHS: [&str; 2] = [
+    "/run/user/1000/app/com.discordapp.Discord/discord-ipc-0",
+    "/run/user/1000/discord-ipc-0",
+];
 
 #[derive(Debug)]
 struct State {
@@ -44,11 +47,13 @@ struct Frame {
 
 #[derive(Debug, Deserialize)]
 struct FrameArgs {
+    #[serde(default)]
     activity: FrameActivity,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct FrameActivity {
+    #[serde(default)]
     assets: FrameAssets,
     #[serde(default)]
     #[allow(unused)]
@@ -60,11 +65,32 @@ struct FrameActivity {
     state: String,
 }
 
+fn number_to_u64<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = serde_json::Value::deserialize(deserializer)?;
+    match value {
+        serde_json::Value::Number(n) => {
+            if let Some(n) = n.as_u64() {
+                Ok(Some(n))
+            } else if let Some(n) = n.as_f64() {
+                Ok(Some(n as u64))
+            } else {
+                Ok(None)
+            }
+        }
+        _ => Ok(None),
+    }
+}
+
 #[derive(Debug, Deserialize, Default)]
 struct FrameTimestamps {
     #[serde(default)]
+    #[serde(deserialize_with = "number_to_u64")]
     start: Option<u64>,
     #[serde(default)]
+    #[serde(deserialize_with = "number_to_u64")]
     end: Option<u64>,
 }
 
@@ -76,7 +102,7 @@ struct FrameButton {
     url: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Default)]
 struct FrameAssets {
     #[serde(default)]
     #[allow(unused)]
@@ -123,25 +149,33 @@ async fn socket_encode(socket: &mut UnixStream, message: Message) -> Result<(), 
 async fn main() -> Result<(), Box<dyn Error>> {
     STATE.get_or_init(|| Mutex::new(HashMap::new()));
     tracing_subscriber::fmt::init();
-    if Path::new(SOCKET_PATH).exists() {
-        fs::remove_file(SOCKET_PATH)?;
-    }
-
-    let listener = UnixListener::bind(SOCKET_PATH)?;
-    info!("Listening on: {}", SOCKET_PATH);
-
-    tokio::spawn(async move {
+    let mut join_set = JoinSet::new();
+    join_set.spawn(async move {
         periodic_print().await;
     });
+    for path in SOCKET_PATHS {
+        if Path::new(path).exists() {
+            fs::remove_file(path)?;
+        }
 
-    loop {
-        let (socket, _) = listener.accept().await?;
-        tokio::spawn(async move {
-            if let Err(e) = handle_connection(socket).await {
-                warn!("Error: {:?}", e);
+        let listener = UnixListener::bind(path)?;
+        info!("Listening on: {}", path);
+
+        join_set.spawn(async move {
+            loop {
+                let (socket, _) = listener.accept().await.expect("accept failed");
+                tokio::spawn(async move {
+                    if let Err(e) = handle_connection(socket).await {
+                        warn!("Error: {:?}", e);
+                    }
+                });
             }
         });
     }
+
+    join_set.join_all().await;
+
+    Ok(())
 }
 
 async fn periodic_print() {
@@ -182,7 +216,11 @@ async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>>
     info!("Handshake with client_id {}", client_id);
     let handshake_resp = Message {
         opcode: 1,
-        payload: serde_json::json!({"cmd": "DISPATCH", "evt": "READY"}),
+        payload: serde_json::json!({"cmd": "DISPATCH", "evt": "READY", "data": {
+            "user": {
+                "id": "1"
+            }
+        }}),
     };
     socket_encode(&mut socket, handshake_resp).await?;
 
@@ -203,10 +241,18 @@ async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>>
                             state: message.args.activity.state,
                             details: message.args.activity.details,
                             start_time: message.args.activity.timestamps.start.map(|timestamps| {
-                                std::time::UNIX_EPOCH + std::time::Duration::from_secs(timestamps)
+                                if timestamps < 9999999999 {
+                                    std::time::UNIX_EPOCH + std::time::Duration::from_secs(timestamps)
+                                } else {
+                                    std::time::UNIX_EPOCH + std::time::Duration::from_millis(timestamps)
+                                }
                             }),
                             end_time: message.args.activity.timestamps.end.map(|timestamps| {
-                                std::time::UNIX_EPOCH + std::time::Duration::from_secs(timestamps)
+                                if timestamps < 9999999999 {
+                                    std::time::UNIX_EPOCH + std::time::Duration::from_secs(timestamps)
+                                } else {
+                                    std::time::UNIX_EPOCH + std::time::Duration::from_millis(timestamps)
+                                }
                             }),
                         };
                         STATE
