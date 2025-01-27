@@ -27,7 +27,7 @@
     <div class="container">
         <h1 class="mb-4 text-center">Presence</h1>
         <div class="alert alert-info" role="alert">
-            Last updated: {{ last_updated.format("%Y-%m-%d %H:%M:%S") }}
+            Last updated: {{ last_updated.format("%Y-%m-%d %H:%M:%S %z") }}
         </div>
         
         {% if states.len() > 0 %}
@@ -45,10 +45,10 @@
                                 <p class="card-text"><strong>Details:</strong> {{ state.details }}</p>
                                 <p class="card-text">
                                     {% if state.start_time.is_some() %}
-                                    <small class="text-muted">Start: {{ state.start_time.unwrap().format("%Y-%m-%d %H:%M:%S") }}</small><br>
+                                    <small class="text-muted">Start: {{ state.start_time.unwrap().format("%Y-%m-%d %H:%M:%S %z") }}</small><br>
                                     {% endif %}
                                     {% if state.end_time.is_some() %}
-                                    <small class="text-muted">End: {{ state.end_time.unwrap().format("%Y-%m-%d %H:%M:%S") }}</small>
+                                    <small class="text-muted">End: {{ state.end_time.unwrap().format("%Y-%m-%d %H:%M:%S %z") }}</small>
                                     {% endif %}
                                 </p>
                             </div>

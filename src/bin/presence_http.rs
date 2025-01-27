@@ -9,7 +9,7 @@ use axum::{
     Json, Router,
 };
 use axum_macros::debug_handler;
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use tokio::sync::RwLock;
 
 use presenced::{PresenceState, StateUpdate};
@@ -17,14 +17,14 @@ use presenced::{PresenceState, StateUpdate};
 #[derive(Debug)]
 struct AppState {
     states: RwLock<Vec<PresenceState>>,
-    last_updated: RwLock<DateTime<Utc>>,
+    last_updated: RwLock<DateTime<Local>>,
 }
 
 impl Default for AppState {
     fn default() -> Self {
         Self {
             states: RwLock::new(Vec::new()),
-            last_updated: RwLock::new(Utc::now()),
+            last_updated: RwLock::new(Local::now()),
         }
     }
 }
@@ -33,7 +33,7 @@ impl Default for AppState {
 #[template(path = "index.html")]
 struct PresenceTemplate {
     states: Vec<PresenceState>,
-    last_updated: DateTime<Utc>,
+    last_updated: DateTime<Local>,
 }
 
 #[debug_handler]
@@ -63,7 +63,7 @@ async fn update_state(
     let state = &payload.state;
     guard.clear();
     guard.extend_from_slice(state);
-    *app_state.last_updated.write().await = Utc::now();
+    *app_state.last_updated.write().await = Local::now();
 
     StatusCode::OK
 }

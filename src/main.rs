@@ -6,7 +6,7 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use chrono::{DateTime, Utc};
+use chrono::{DateTime, Local};
 use serde::Deserialize;
 use tokio::{
     io::{AsyncReadExt, AsyncWriteExt},
@@ -203,8 +203,8 @@ async fn periodic_send(state: SharedState) {
                 small_text: state.small_text.clone(),
                 state: state.state.clone(),
                 details: state.details.clone(),
-                start_time: state.start_time.map(DateTime::<Utc>::from),
-                end_time: state.end_time.map(DateTime::<Utc>::from),
+                start_time: state.start_time.map(DateTime::<Local>::from),
+                end_time: state.end_time.map(DateTime::<Local>::from),
             });
         }
         // Send to endpoint /state
