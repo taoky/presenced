@@ -144,6 +144,7 @@ async fn socket_encode(socket: &mut UnixStream, message: Message) -> Result<(), 
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
+    tracing_subscriber::fmt::init();
     EXPECTED_TOKEN.get_or_init(|| std::env::var("TOKEN").expect("TOKEN env var not set"));
     UPSTREAM_URL.get_or_init(|| {
         std::env::var("UPSTREAM").unwrap_or_else(|_| "http://localhost:3001".to_string())
@@ -158,7 +159,6 @@ async fn main() -> Result<(), Box<dyn Error>> {
         xdg_runtime_dir.join("app/com.discordapp.Discord/discord-ipc-0"),
         xdg_runtime_dir.join("discord-ipc-0"),
     ];
-    tracing_subscriber::fmt::init();
     let mut join_set = JoinSet::new();
 
     let state_1 = state.clone();
