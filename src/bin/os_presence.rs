@@ -11,7 +11,7 @@ use tokio::{fs::File, io::AsyncReadExt, net::UnixStream};
 async fn main() {
     let xdg_runtime_dir = dirs::runtime_dir().unwrap_or("/tmp".into());
     let socket_path = xdg_runtime_dir.join("discord-ipc-0");
-
+    let _ = sd_notify::notify(true, &[sd_notify::NotifyState::Ready]);
     loop {
         if let Err(e) = handle_connect(&socket_path).await {
             eprintln!("Error: {:?}", e);

@@ -1,0 +1,17 @@
+[Unit]
+Description=OS Rich Presence
+After=network.target presenced.service
+
+[Service]
+ExecStart=%h/.local/bin/os_presence
+Restart=on-failure
+MemoryMax=100M
+ProtectSystem=full
+ReadOnlyPaths=%h/.local/bin/os_presence
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+Type=notify
+
+[Install]
+WantedBy=default.target
