@@ -15,6 +15,9 @@ use tokio::{
 };
 use tracing::{debug, info, warn};
 
+mod wellknown;
+use wellknown::CLIENT_MAPPINGS;
+
 #[derive(Debug)]
 struct State {
     large_text: String,
@@ -178,14 +181,18 @@ async fn main() -> Result<(), Box<dyn Error>> {
     Ok(())
 }
 
+fn client_id_to_name(client_id: &str) -> String {
+    CLIENT_MAPPINGS.get(client_id).unwrap_or(&client_id).to_string()
+}
+
 async fn periodic_print() {
     loop {
         tokio::time::sleep(tokio::time::Duration::from_secs(5)).await;
         let state = STATE.get().unwrap().lock().unwrap();
         for (client_id, state) in state.iter() {
             info!(
-                "client_id: {}, state:\n  large_text: {}\n  small_text: {}\n  state: {}\n  details: {}\n  start_time: {}\n  end_time: {}",
-                client_id,
+                "client: {}, state:\n  large_text: {}\n  small_text: {}\n  state: {}\n  details: {}\n  start_time: {}\n  end_time: {}",
+                client_id_to_name(client_id),
                 state.large_text,
                 state.small_text,
                 state.state,
@@ -213,7 +220,7 @@ async fn handle_connection(mut socket: UnixStream) -> Result<(), Box<dyn Error>>
         .as_str()
         .unwrap_or_default()
         .to_string();
-    info!("Handshake with client_id {}", client_id);
+    info!("Handshake with client: {}", client_id_to_name(&client_id));
     let handshake_resp = Message {
         opcode: 1,
         payload: serde_json::json!({"cmd": "DISPATCH", "evt": "READY", "data": {
