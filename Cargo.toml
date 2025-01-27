@@ -2,7 +2,7 @@
 name = "presenced"
 version = "0.1.0"
 edition = "2021"
-description = "An naive local implemention of Discord presence server"
+description = "A naive local implemention of Discord presence server"
 
 [dependencies]
 chrono = "0.4.39"
