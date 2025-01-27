@@ -7,9 +7,9 @@ use std::{
 };
 
 use chrono::{DateTime, Local};
+use presenced::{socket_decode, socket_encode, Message};
 use serde::Deserialize;
 use tokio::{
-    io::{AsyncReadExt, AsyncWriteExt},
     net::{UnixListener, UnixStream},
     task::JoinSet,
 };
@@ -29,12 +29,6 @@ struct State {
 }
 
 type SharedState = Arc<Mutex<HashMap<String, State>>>;
-
-#[derive(Debug)]
-struct Message {
-    opcode: u32,
-    payload: serde_json::Value,
-}
 
 #[derive(Debug, Deserialize)]
 struct Frame {
@@ -111,35 +105,6 @@ struct FrameAssets {
     small_image: String,
     #[serde(default)]
     small_text: String,
-}
-
-async fn socket_decode(socket: &mut UnixStream) -> Result<Message, Box<dyn Error>> {
-    let mut opcode = [0u8; 4];
-    socket.read_exact(&mut opcode).await?;
-    let opcode = u32::from_le_bytes(opcode);
-    let mut length = [0u8; 4];
-    socket.read_exact(&mut length).await?;
-    let length = u32::from_le_bytes(length);
-    // reject if length is greater than 1M
-    if length > 1_000_000 {
-        return Err("Payload too large".into());
-    }
-    let mut payload = vec![0u8; length as usize];
-    socket.read_exact(&mut payload).await?;
-    let payload = String::from_utf8(payload)?;
-    let payload = serde_json::from_str::<serde_json::Value>(&payload)?;
-    Ok(Message { opcode, payload })
-}
-
-async fn socket_encode(socket: &mut UnixStream, message: Message) -> Result<(), Box<dyn Error>> {
-    let opcode = message.opcode.to_le_bytes();
-    socket.write_all(&opcode).await?;
-    let payload = serde_json::to_string(&message.payload)?;
-    let length = payload.len() as u32;
-    let length = length.to_le_bytes();
-    socket.write_all(&length).await?;
-    socket.write_all(payload.as_bytes()).await?;
-    Ok(())
 }
 
 #[tokio::main]
