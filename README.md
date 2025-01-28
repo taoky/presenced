@@ -1,7 +1,8 @@
 # presenced
 
 - presenced: Opens `$XDG_RUNTIME_DIR/app/com.discordapp.Discord/discord-ipc-0` and `$XDG_RUNTIME_DIR/run/user/1000/discord-ipc-0`, acts like a Discord client, and sends state info to given HTTP server.
-- presence-http: A simple HTTP server that listens for `presenced` POSTed data at `/state`, and gives a friendly HTML at `/`.
+- presence_http: A simple HTTP server that listens for `presenced` POSTed data at `/state`, and gives a friendly HTML at `/`.
+- os_presence: An example client that reports kernel version, distro & desktop environment name, and uptime to `presenced`.
 
 ## Deployment
 
@@ -21,7 +22,7 @@ systemctl --user daemon-reload
 systemctl --user enable --now presenced.service
 ```
 
-### presence-http
+### presence_http
 
 Use `docker compose`. Please refer to `contrib/presence_http/`.
 
