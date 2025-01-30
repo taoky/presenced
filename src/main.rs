@@ -139,6 +139,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         if Path::new(path).exists() {
             fs::remove_file(path)?;
         }
+        path.parent().map(|p| fs::create_dir_all(p).unwrap());
 
         let listener = UnixListener::bind(path)?;
         info!("Listening on: {}", path.display());
