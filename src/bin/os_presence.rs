@@ -83,6 +83,8 @@ async fn handle_connect(socket_path: &Path) -> Result<(), Box<dyn Error>> {
     loop {
         let mut buf = [0u8; 1024];
         #[allow(clippy::unused_io_amount)]
-        stream.read(&mut buf).await?;
+        if stream.read(&mut buf).await? == 0 {
+            return Ok(());
+        }
     }
 }
