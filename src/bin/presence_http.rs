@@ -2,11 +2,11 @@ use std::sync::{Arc, OnceLock};
 
 use askama::Template;
 use axum::{
+    Json, Router,
     extract::State,
     http::StatusCode,
     response::IntoResponse,
     routing::{get, post},
-    Json, Router,
 };
 use axum_macros::debug_handler;
 use chrono::{DateTime, Local};
@@ -70,7 +70,7 @@ async fn update_state(
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::fmt::init();
+    tracing_subscriber::fmt().init();
     EXPECTED_TOKEN.get_or_init(|| std::env::var("TOKEN").expect("TOKEN env var not set"));
     let app_state = Arc::new(AppState::default());
 

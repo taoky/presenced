@@ -4,7 +4,7 @@ use std::{error::Error, path::Path};
 
 use chrono::Utc;
 use nix::sys::utsname::uname;
-use presenced::{socket_decode, socket_encode, Message};
+use presenced::{Message, socket_decode, socket_encode};
 use tokio::{fs::File, io::AsyncReadExt, net::UnixStream};
 
 #[tokio::main]
