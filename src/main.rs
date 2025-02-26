@@ -7,7 +7,7 @@ use std::{
 };
 
 use chrono::{DateTime, Local};
-use presenced::{socket_decode, socket_encode, Message};
+use presenced::{Message, socket_decode, socket_encode};
 use serde::Deserialize;
 use tokio::{
     net::{UnixListener, UnixStream},
@@ -109,7 +109,12 @@ struct FrameAssets {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    tracing_subscriber::fmt().init();
+    let is_systemd_service = std::env::var("INVOCATION_ID").is_ok();
+    if is_systemd_service {
+        tracing_subscriber::fmt().without_time().compact().init();
+    } else {
+        tracing_subscriber::fmt().init();
+    }
     EXPECTED_TOKEN.get_or_init(|| std::env::var("TOKEN").expect("TOKEN env var not set"));
     UPSTREAM_URL.get_or_init(|| {
         std::env::var("UPSTREAM").unwrap_or_else(|_| "http://localhost:3001".to_string())
@@ -135,7 +140,9 @@ async fn main() -> Result<(), Box<dyn Error>> {
         if Path::new(path).exists() {
             fs::remove_file(path)?;
         }
-        path.parent().map(|p| fs::create_dir_all(p).unwrap());
+        if let Some(p) = path.parent() {
+            fs::create_dir_all(p).unwrap()
+        }
 
         let listener = UnixListener::bind(path)?;
         info!("Listening on: {}", path.display());
