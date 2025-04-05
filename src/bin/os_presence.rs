@@ -6,6 +6,23 @@ use chrono::Utc;
 use nix::sys::utsname::uname;
 use presenced::{Message, socket_decode, socket_encode};
 use tokio::{fs::File, io::AsyncReadExt, net::UnixStream};
+use zbus::{Connection, Proxy};
+
+async fn get_desktop_from_systemd() -> Option<String> {
+    let connection = Connection::session().await.ok()?;
+    let proxy = Proxy::new(
+        &connection,
+        "org.freedesktop.systemd1",
+        "/org/freedesktop/systemd1",
+        "org.freedesktop.systemd1.Manager",
+    )
+    .await
+    .ok()?;
+    let env: Vec<String> = proxy.get_property("Environment").await.ok()?;
+    env.iter()
+        .find(|s| s.starts_with("XDG_CURRENT_DESKTOP="))
+        .and_then(|s| s.split('=').nth(1).map(|s| s.to_string()))
+}
 
 #[tokio::main]
 async fn main() {
@@ -47,7 +64,21 @@ async fn handle_connect(socket_path: &Path) -> Result<(), Box<dyn Error>> {
             .unwrap_or("unknown".to_owned());
         buf.trim_matches('"').to_owned()
     };
-    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or("unknown".to_owned());
+    // Try getting the desktop environment (wait for 1 minute)
+    let mut retries = 60;
+    let desktop = loop {
+        if let Some(desktop) = get_desktop_from_systemd().await {
+            break desktop;
+        }
+        if let Some(desktop) = std::env::var("XDG_CURRENT_DESKTOP").ok() {
+            break desktop;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+        retries -= 1;
+        if retries == 0 {
+            break "unknown".to_owned();
+        }
+    };
     let mut stream = UnixStream::connect(&socket_path).await?;
     println!("Connected to Discord presence IPC");
     socket_encode(

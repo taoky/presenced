@@ -4,8 +4,6 @@ After=network.target presenced.service graphical-session.target
 Requires=graphical-session.target
 
 [Service]
-# workaround for waiting session to be fully loaded
-ExecStartPre=/bin/sleep 10
 ExecStart=%h/.local/bin/os_presence
 Restart=on-failure
 MemoryMax=100M
