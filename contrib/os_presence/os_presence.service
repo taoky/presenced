@@ -1,7 +1,6 @@
 [Unit]
 Description=OS Rich Presence
 After=network.target presenced.service graphical-session.target
-Requires=graphical-session.target
 
 [Service]
 ExecStart=%h/.local/bin/os_presence
